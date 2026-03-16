@@ -1,0 +1,217 @@
+{
+  "beneficios_cidadao": {
+    "novo_bolsa_familia": {
+      "dataset": "basedosdados.br_cgu_beneficios_cidadao",
+      "table": "novo_bolsa_familia",
+      "output": "novo_bolsa_familia.csv",
+      "folder": "beneficios_cidadao"
+    },
+    "bpc": {
+      "dataset": "basedosdados.br_cgu_beneficios_cidadao",
+      "table": "bpc",
+      "output": "bpc.csv",
+      "folder": "beneficios_cidadao"
+    },
+    "bolsa_familia_antigo": {
+      "dataset": "basedosdados.br_cgu_beneficios_cidadao",
+      "table": "bolsa_familia_pagamento",
+      "output": "bolsa_familia_antigo.csv",
+      "folder": "beneficios_cidadao"
+    }
+  },
+
+  "avaliacao_alfabetizacao": {
+    "uf": {
+      "dataset": "basedosdados.br_inep_avaliacao_alfabetizacao",
+      "table": "uf",
+      "output": "uf.csv",
+      "folder": "avaliacao_alfabetizacao"
+    },
+    "municipio": {
+      "dataset": "basedosdados.br_inep_avaliacao_alfabetizacao",
+      "table": "municipio",
+      "output": "municipio.csv",
+      "folder": "avaliacao_alfabetizacao"
+    },
+    "meta_alfabetizacao_uf": {
+      "dataset": "basedosdados.br_inep_avaliacao_alfabetizacao",
+      "table": "meta_alfabetizacao_uf",
+      "output": "meta_alfabetizacao_uf.csv",
+      "folder": "avaliacao_alfabetizacao"
+    },
+    "meta_alfabetizacao_municipio": {
+      "dataset": "basedosdados.br_inep_avaliacao_alfabetizacao",
+      "table": "meta_alfabetizacao_municipio",
+      "output": "meta_alfabetizacao_municipio.csv",
+      "folder": "avaliacao_alfabetizacao"
+    },
+    "meta_alfabetizacao_brasil": {
+      "dataset": "basedosdados.br_inep_avaliacao_alfabetizacao",
+      "table": "meta_alfabetizacao_brasil",
+      "output": "meta_alfabetizacao_brasil.csv",
+      "folder": "avaliacao_alfabetizacao"
+    }
+  },
+
+  "pib": {
+    "municipio": {
+      "dataset": "basedosdados.br_ibge_pib",
+      "table": "municipio",
+      "output": "municipio.csv",
+      "folder": "pib"
+    },
+    "municipio_antigo": {
+      "dataset": "basedosdados.br_ibge_pib",
+      "table": "municipio_antigo",
+      "output": "municipio_antigo.csv",
+      "folder": "pib"
+    },
+    "uf": {
+      "dataset": "basedosdados.br_ibge_pib",
+      "table": "uf",
+      "output": "uf.csv",
+      "folder": "pib"
+    },
+    "uf_antigo": {
+      "dataset": "basedosdados.br_ibge_pib",
+      "table": "uf_antigo",
+      "output": "uf_antigo.csv",
+      "folder": "pib"
+    },
+    "regiao_antigo": {
+      "dataset": "basedosdados.br_ibge_pib",
+      "table": "regiao_antigo",
+      "output": "regiao_antigo.csv",
+      "folder": "pib"
+    },
+    "brasil_antigo": {
+      "dataset": "basedosdados.br_ibge_pib",
+      "table": "brasil_antigo",
+      "output": "brasil_antigo.csv",
+      "folder": "pib"
+    },
+    "gini": {
+      "dataset": "basedosdados.br_ibge_pib",
+      "table": "gini",
+      "output": "gini.csv",
+      "folder": "pib"
+    }
+  },
+
+  "saeb": {
+    "aluno_ef_2ano": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "aluno_ef_2ano",
+      "output": "aluno_ef_2ano.csv",
+      "folder": "saeb"
+    },
+    "aluno_ef_5ano": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "aluno_ef_5ano",
+      "output": "aluno_ef_5ano.csv",
+      "folder": "saeb"
+    },
+    "aluno_ef_9ano": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "aluno_ef_9ano",
+      "output": "aluno_ef_9ano.csv",
+      "folder": "saeb"
+    },
+    "aluno_em_34ano": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "aluno_em_34ano",
+      "output": "aluno_em_34ano.csv",
+      "folder": "saeb"
+    },
+    "proficiencia": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "proficiencia",
+      "output": "proficiencia.csv",
+      "folder": "saeb"
+    },
+    "brasil": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "brasil",
+      "output": "brasil.csv",
+      "folder": "saeb"
+    },
+    "uf": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "uf",
+      "output": "uf.csv",
+      "folder": "saeb"
+    },
+    "municipio": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "municipio",
+      "output": "municipio.csv",
+      "folder": "saeb"
+    },
+    "brasil_taxa_alfabetizacao": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "brasil_taxa_alfabetizacao",
+      "output": "taxa_alfabetizacao_brasil.csv",
+      "folder": "saeb"
+    },
+    "uf_taxa_alfabetizacao": {
+      "dataset": "basedosdados.br_inep_saeb",
+      "table": "uf_taxa_alfabetizacao",
+      "output": "taxa_alfabetizacao_uf.csv",
+      "folder": "saeb"
+    }
+  },
+
+  "caged": {
+    "microdados_antigos": {
+      "dataset": "basedosdados.br_me_caged",
+      "table": "microdados_antigos",
+      "output": "microdados_antigos.csv",
+      "folder": "caged"
+    },
+    "microdados_antigos_ajustes": {
+      "dataset": "basedosdados.br_me_caged",
+      "table": "microdados_antigos_ajustes",
+      "output": "microdados_antigos_ajustes.csv",
+      "folder": "caged"
+    },
+    "microdados_movimentacao": {
+      "dataset": "basedosdados.br_me_caged",
+      "table": "microdados_movimentacao",
+      "output": "microdados_movimentacao.csv",
+      "folder": "caged"
+    },
+    "microdados_movimentacao_excluida": {
+      "dataset": "basedosdados.br_me_caged",
+      "table": "microdados_movimentacao_excluida",
+      "output": "microdados_movimentacao_excluida.csv",
+      "folder": "caged"
+    },
+    "microdados_movimentacao_fora_prazo": {
+      "dataset": "basedosdados.br_me_caged",
+      "table": "microdados_movimentacao_fora_prazo",
+      "output": "microdados_movimentacao_fora_prazo.csv",
+      "folder": "caged"
+    }
+  },
+
+  "populacao": {
+    "brasil": {
+      "dataset": "basedosdados.br_ibge_populacao",
+      "table": "brasil",
+      "output": "brasil.csv",
+      "folder": "populacao"
+    },
+    "municipio": {
+      "dataset": "basedosdados.br_ibge_populacao",
+      "table": "municipio",
+      "output": "municipio.csv",
+      "folder": "populacao"
+    },
+    "uf": {
+      "dataset": "basedosdados.br_ibge_populacao",
+      "table": "uf",
+      "output": "uf.csv",
+      "folder": "populacao"
+    }
+  }
+}
