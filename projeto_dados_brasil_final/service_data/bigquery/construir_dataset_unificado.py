@@ -2,8 +2,19 @@ import argparse
 import importlib
 import json
 import os
+import sys
 
 from google.cloud import bigquery
+
+try:
+  from service_data.bigquery.acesso_google_cloud import criar_cliente_bigquery
+except ModuleNotFoundError:
+  # Suporta execucao direta via "python caminho/arquivo.py" fora do package root.
+  CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+  PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
+  if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+  from service_data.bigquery.acesso_google_cloud import criar_cliente_bigquery
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(CURRENT_DIR, "base_dados_bigquery.json")
@@ -501,9 +512,16 @@ VALUES (
 """
 
 
-def executar_pipeline(project_id, analytics_dataset, analytics_table, mode, lookback_months):
+def executar_pipeline(
+  project_id,
+  analytics_dataset,
+  analytics_table,
+  mode,
+  lookback_months,
+  credentials_json=None,
+):
     datasets = carregar_datasets()
-    client = bigquery.Client(project=project_id)
+    client = criar_cliente_bigquery(project_id=project_id, credentials_json=credentials_json)
 
     if mode == "full":
         query = montar_query_full(project_id, analytics_dataset, analytics_table, datasets)
@@ -525,20 +543,21 @@ def executar_pipeline(project_id, analytics_dataset, analytics_table, mode, look
     )
 
 
-def validar_amostra(project_id, analytics_dataset, analytics_table):
+def validar_amostra(project_id, analytics_dataset, analytics_table, credentials_json=None):
   tabela = f"{project_id}.{analytics_dataset}.{analytics_table}"
   query = f"SELECT * FROM `{tabela}` ORDER BY data_referencia DESC LIMIT 100"
+  client = criar_cliente_bigquery(project_id=project_id, credentials_json=credentials_json)
 
   try:
     pandas_gbq = importlib.import_module("pandas_gbq")
     df_preview = pandas_gbq.read_gbq(
       query,
-      project_id=project_id,
+      project_id=client.project,
       dialect="standard",
       progress_bar_type=None,
+      credentials=getattr(client, "_credentials", None),
     )
   except ImportError:
-    client = bigquery.Client(project=project_id)
     df_preview = client.query(query).result().to_dataframe()
     print("Aviso: pandas-gbq nao encontrado. Usando fallback via BigQuery Client.")
 
@@ -552,6 +571,7 @@ def exportar_csv_local(
   source_table,
   local_csv_path,
   max_rows,
+  credentials_json=None,
 ):
   tabela = f"{project_id}.{analytics_dataset}.{source_table}"
   colunas = ", ".join(FEATURE_COLUMNS)
@@ -561,17 +581,18 @@ def exportar_csv_local(
 
   output_dir = os.path.dirname(local_csv_path) or "."
   os.makedirs(output_dir, exist_ok=True)
+  client = criar_cliente_bigquery(project_id=project_id, credentials_json=credentials_json)
 
   try:
     pandas_gbq = importlib.import_module("pandas_gbq")
     df_export = pandas_gbq.read_gbq(
       query,
-      project_id=project_id,
+      project_id=client.project,
       dialect="standard",
       progress_bar_type=None,
+      credentials=getattr(client, "_credentials", None),
     )
   except ImportError:
-    client = bigquery.Client(project=project_id)
     df_export = client.query(query).result().to_dataframe()
     print("Aviso: pandas-gbq nao encontrado. Exportando via BigQuery Client.")
 
@@ -591,6 +612,11 @@ def parse_args():
     default=os.getenv("GCP_PROJECT_ID", "projetofinalia-488312"),
     required=False,
     help="ID do projeto GCP que hospedara a tabela consolidada.",
+  )
+  parser.add_argument(
+    "--credentials-json",
+    default=os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+    help="Caminho para arquivo JSON da Service Account (opcional).",
   )
   parser.add_argument(
     "--analytics-dataset",
@@ -649,11 +675,13 @@ if __name__ == "__main__":
     analytics_table=args.analytics_table,
     mode=args.mode,
     lookback_months=args.lookback_months,
+    credentials_json=args.credentials_json,
   )
   validar_amostra(
     project_id=args.project_id,
     analytics_dataset=args.analytics_dataset,
     analytics_table=args.analytics_table,
+    credentials_json=args.credentials_json,
   )
   if args.export_local_csv:
     exportar_csv_local(
@@ -662,4 +690,5 @@ if __name__ == "__main__":
       source_table=args.export_source_table or args.analytics_table,
       local_csv_path=args.local_csv_path,
       max_rows=args.local_max_rows,
+      credentials_json=args.credentials_json,
     )

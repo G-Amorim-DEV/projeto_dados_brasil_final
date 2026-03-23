@@ -1,1 +1,4 @@
 venv
+
+# Credenciais locais (nao versionar)
+projeto_dados_brasil_final/service_data/bigquery/google_credentials.json

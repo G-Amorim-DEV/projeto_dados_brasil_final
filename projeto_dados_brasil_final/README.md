@@ -23,6 +23,41 @@ Gerar uma unica tabela para analise e IA, com:
 
 ## Como criar o Dataset Unico
 
+## Acesso direto ao Google Cloud
+
+### Teste rapido de conexao (BigQuery)
+
+```bash
+python service_data/bigquery/acesso_google_cloud.py \
+  --project-id projetofinalia-488312
+```
+
+### Usando arquivo JSON de Service Account
+
+1. Copie o modelo e preencha com a chave real da Service Account:
+
+```bash
+cp service_data/bigquery/google_credentials.example.json \
+   service_data/bigquery/google_credentials.json
+```
+
+2. Rode o teste de conexao (o script detecta `google_credentials.json` automaticamente):
+
+```bash
+python service_data/bigquery/acesso_google_cloud.py \
+  --project-id projetofinalia-488312
+```
+
+3. Opcional: informar outro caminho manualmente:
+
+```bash
+python service_data/bigquery/acesso_google_cloud.py \
+  --project-id projetofinalia-488312 \
+  --credentials-json /caminho/credenciais.json
+```
+
+Se nao informar `--credentials-json`, o script tenta ADC automaticamente (`gcloud auth application-default login`).
+
 ### Carga completa (rebuild)
 
 ```bash
