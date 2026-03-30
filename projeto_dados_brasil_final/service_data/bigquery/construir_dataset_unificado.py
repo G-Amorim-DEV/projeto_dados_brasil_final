@@ -16,15 +16,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
-    # Tenta importar usando o caminho completo do pacote
-    from projeto_dados_brasil_final.service_data.bigquery.acesso_google_cloud import criar_cliente_bigquery
+  # Tenta importar usando o caminho completo do pacote
+  from projeto_dados_brasil_final.service_data.bigquery.acesso_google_cloud import obter_cliente
 except (ModuleNotFoundError, ImportError):
-    try:
-        # Tenta importar como módulo relativo se executado de dentro da pasta
-        from acesso_google_cloud import criar_cliente_bigquery
-    except (ModuleNotFoundError, ImportError):
-        # Fallback para estrutura de pastas service_data.bigquery
-        from service_data.bigquery.acesso_google_cloud import criar_cliente_bigquery
+  try:
+    # Tenta importar como módulo relativo se executado de dentro da pasta
+    from acesso_google_cloud import obter_cliente
+  except (ModuleNotFoundError, ImportError):
+    # Fallback para estrutura de pastas service_data.bigquery
+    from service_data.bigquery.acesso_google_cloud import obter_cliente
 
 # Caminho para o JSON de configuração (baseado na localização deste script)
 CONFIG_PATH = CURRENT_FILE_PATH.parent / "base_dados_bigquery.json"
@@ -462,14 +462,17 @@ WHEN NOT MATCHED THEN
 
 def executar_pipeline(project_id, analytics_dataset, analytics_table, mode, lookback_months, credentials_json=None):
     datasets = carregar_datasets()
-    client = criar_cliente_bigquery(project_id=project_id, credentials_json=credentials_json)
+    client = obter_cliente()
 
     if mode == "full":
-        query = montar_query_full(project_id, analytics_dataset, analytics_table, datasets)
+      query = montar_query_full(project_id, analytics_dataset, analytics_table, datasets)
     else:
-        # Lógica incremental (MERGE) conforme o original
-        query = montar_query_incremental(project_id, analytics_dataset, analytics_table, datasets, lookback_months)
+      # Lógica incremental (MERGE) conforme o original
+      query = montar_query_incremental(project_id, analytics_dataset, analytics_table, datasets, lookback_months)
 
+    print(f"\n--- QUERY EXECUTADA NO BIGQUERY ---\n")
+    print(query)
+    print(f"\n--- FIM DA QUERY ---\n")
     print(f"Executando pipeline no modo: {mode}...")
     job = client.query(query)
     job.result()
@@ -477,12 +480,26 @@ def executar_pipeline(project_id, analytics_dataset, analytics_table, mode, look
 
 def validar_amostra(project_id, analytics_dataset, analytics_table, credentials_json=None):
     tabela = f"{project_id}.{analytics_dataset}.{analytics_table}"
-    query = f"SELECT * FROM `{tabela}` ORDER BY data_referencia DESC LIMIT 5"
-    client = criar_cliente_bigquery(project_id=project_id, credentials_json=credentials_json)
+    client = obter_cliente()
     
     print("\n--- Amostra de Validação (Top 5) ---")
-    df = client.query(query).to_dataframe()
-    print(df)
+    query_amostra = f"SELECT * FROM `{tabela}` ORDER BY data_referencia DESC LIMIT 5"
+    df_amostra = client.query(query_amostra).to_dataframe()
+    print(df_amostra)
+
+    # Exporta todos os dados para CSV se solicitado
+    if hasattr(args, "export_local_csv") and args.export_local_csv:
+      print("Exportando todos os dados para feature_store_beneficios.csv ...")
+      query_tudo = f"SELECT * FROM `{tabela}`"
+      df_tudo = client.query(query_tudo).to_dataframe()
+      total_linhas = len(df_tudo)
+      print(f"Total de linhas no dataset unificado: {total_linhas}")
+      if total_linhas == 0:
+        print("ATENÇÃO: O dataset unificado está vazio! Verifique as tabelas de origem e a query de unificação.")
+      else:
+        df_tudo.to_csv("feature_store_beneficios.csv", index=False, encoding="utf-8")
+        print("Arquivo feature_store_beneficios.csv salvo com sucesso.")
+        print("O dataset unificado está pronto para análise!")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Pipeline Feature Store BigQuery")
