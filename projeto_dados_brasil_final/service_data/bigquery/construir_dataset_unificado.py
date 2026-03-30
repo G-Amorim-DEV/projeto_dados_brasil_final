@@ -1,16 +1,14 @@
 import argparse
-import importlib
 import json
-import os
 import sys
 from pathlib import Path
-from google.cloud import bigquery
+from google.api_core.exceptions import Forbidden
 
 # --- CORREÇÃO DE PATH E IMPORTAÇÃO ---
 # Resolve o diretório raiz do projeto para permitir importações absolutas
 CURRENT_FILE_PATH = Path(__file__).resolve()
 # Sobe dois níveis para chegar na raiz 'projeto_dados_brasil_final'
-PROJECT_ROOT = CURRENT_FILE_PATH.parents 
+PROJECT_ROOT = CURRENT_FILE_PATH.parents[2]
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -54,6 +52,7 @@ def montar_ctes_feature_store(datasets):
     # Pega as referências do JSON
     tabela_bf_antigo = tabela_referencia(datasets, "beneficios_cidadao", "bolsa_familia_antigo")
     tabela_bf_novo = tabela_referencia(datasets, "beneficios_cidadao", "novo_bolsa_familia")
+    tabela_bpc = tabela_referencia(datasets, "beneficios_cidadao", "bpc")
     tabela_caged = tabela_referencia(datasets, "caged", "microdados_movimentacao")
     tabela_pib = tabela_referencia(datasets, "pib", "municipio")
     tabela_gini = tabela_referencia(datasets, "pib", "gini")
@@ -63,98 +62,67 @@ def montar_ctes_feature_store(datasets):
 
     return f"""
 beneficios_unificado AS (
-  SELECT * FROM `{tabela_bf_antigo}`
+  SELECT
+    CAST(id_municipio AS STRING) AS id_municipio,
+    SAFE_CAST(COALESCE(ano_referencia, ano_competencia) AS INT64) AS ano,
+    SAFE_CAST(COALESCE(mes_referencia, mes_competencia) AS INT64) AS mes,
+    NULLIF(TRIM(CAST(cpf_favorecido AS STRING)), '') AS cpf_favorecido,
+    NULLIF(TRIM(CAST(nis_favorecido AS STRING)), '') AS nis_favorecido,
+    SAFE_CAST(valor_parcela AS FLOAT64) AS valor_parcela
+  FROM `{tabela_bf_antigo}`
+
   UNION ALL
-  SELECT * FROM `{tabela_bf_novo}`
+
+  SELECT
+    CAST(id_municipio AS STRING) AS id_municipio,
+    SAFE_CAST(COALESCE(ano_referencia, ano_competencia) AS INT64) AS ano,
+    SAFE_CAST(COALESCE(mes_referencia, mes_competencia) AS INT64) AS mes,
+    NULLIF(TRIM(CAST(cpf_favorecido AS STRING)), '') AS cpf_favorecido,
+    NULLIF(TRIM(CAST(nis_favorecido AS STRING)), '') AS nis_favorecido,
+    SAFE_CAST(valor_parcela AS FLOAT64) AS valor_parcela
+  FROM `{tabela_bf_novo}`
+
+  UNION ALL
+
+  SELECT
+    CAST(id_municipio AS STRING) AS id_municipio,
+    SAFE_CAST(COALESCE(ano_referencia, ano_competencia) AS INT64) AS ano,
+    SAFE_CAST(COALESCE(mes_referencia, mes_competencia) AS INT64) AS mes,
+    NULLIF(TRIM(CAST(cpf_favorecido AS STRING)), '') AS cpf_favorecido,
+    NULLIF(TRIM(CAST(nis_favorecido AS STRING)), '') AS nis_favorecido,
+    SAFE_CAST(valor_parcela AS FLOAT64) AS valor_parcela
+  FROM `{tabela_bpc}`
 ),
 beneficios_base AS (
   SELECT
-    COALESCE(
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio_6'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.municipio_id')
-    ) AS id_municipio,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano_referencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.year')
-      ) AS INT64
-    ) AS ano,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.mes'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.mes_referencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.month')
-      ) AS INT64
-    ) AS mes,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.quantidade_beneficiarios'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.qtd_beneficiarios'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.beneficiarios')
-      ) AS FLOAT64
-    ) AS quantidade_beneficiarios,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.valor_pago'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.valor_beneficio'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.valor'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.valor_parcela')
-      ) AS FLOAT64
-    ) AS valor_pago
-  FROM beneficios_unificado AS t
+    id_municipio,
+    ano,
+    mes,
+    COALESCE(cpf_favorecido, nis_favorecido) AS beneficiario_id,
+    valor_parcela AS valor_pago
+  FROM beneficios_unificado
 ),
 beneficios AS (
   SELECT
     id_municipio,
     ano,
     mes,
-    SUM(quantidade_beneficiarios) AS quantidade_beneficiarios,
+    COUNT(DISTINCT beneficiario_id) AS quantidade_beneficiarios,
     SUM(valor_pago) AS valor_pago
   FROM beneficios_base
   WHERE id_municipio IS NOT NULL
     AND ano IS NOT NULL
+    AND beneficiario_id IS NOT NULL
     AND mes BETWEEN 1 AND 12
   GROUP BY id_municipio, ano, mes
 ),
 caged_base AS (
   SELECT
-    COALESCE(
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio_6'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.municipio_id')
-    ) AS id_municipio,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano_competencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.year')
-      ) AS INT64
-    ) AS ano,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.mes'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.mes_competencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.month')
-      ) AS INT64
-    ) AS mes,
-    COALESCE(
-      SAFE_CAST(JSON_VALUE(TO_JSON_STRING(t), '$.saldo_movimentacao') AS INT64),
-      CASE
-        WHEN LOWER(COALESCE(JSON_VALUE(TO_JSON_STRING(t), '$.tipo_movimentacao'), JSON_VALUE(TO_JSON_STRING(t), '$.tipo'))) LIKE '%admiss%' THEN 1
-        WHEN LOWER(COALESCE(JSON_VALUE(TO_JSON_STRING(t), '$.tipo_movimentacao'), JSON_VALUE(TO_JSON_STRING(t), '$.tipo'))) LIKE '%deslig%' THEN -1
-        ELSE NULL
-      END,
-      0
-    ) AS sinal_movimentacao,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.salario_mensal'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.salario'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.valor_salario')
-      ) AS FLOAT64
-    ) AS salario_mensal
+    CAST(t.id_municipio AS STRING) AS id_municipio,
+    SAFE_CAST(t.ano AS INT64) AS ano,
+    SAFE_CAST(t.mes AS INT64) AS mes,
+    SAFE_CAST(t.saldo_movimentacao AS INT64) AS sinal_movimentacao,
+    SAFE_CAST(t.salario_mensal AS FLOAT64) AS salario_mensal
   FROM `{tabela_caged}` AS t
 ),
 caged AS (
@@ -172,46 +140,19 @@ caged AS (
 ),
 pib_base AS (
   SELECT
-    COALESCE(
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio_6'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.municipio_id')
-    ) AS id_municipio,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano_referencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.year')
-      ) AS INT64
-    ) AS ano,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.pib_per_capita'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.valor_pib_per_capita')
-      ) AS FLOAT64
-    ) AS pib_per_capita
+    CAST(t.id_municipio AS STRING) AS id_municipio,
+    SAFE_CAST(t.ano AS INT64) AS ano,
+    SAFE_DIVIDE(SAFE_CAST(t.pib AS FLOAT64), NULLIF(SAFE_CAST(pop.populacao AS FLOAT64), 0)) AS pib_per_capita
   FROM `{tabela_pib}` AS t
+  LEFT JOIN `{tabela_pop}` AS pop
+    ON CAST(pop.id_municipio AS STRING) = CAST(t.id_municipio AS STRING)
+    AND SAFE_CAST(pop.ano AS INT64) = SAFE_CAST(t.ano AS INT64)
 ),
 gini_base AS (
   SELECT
-    COALESCE(
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio_6'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.municipio_id')
-    ) AS id_municipio,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano_referencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.year')
-      ) AS INT64
-    ) AS ano,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.indice_gini'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.gini')
-      ) AS FLOAT64
-    ) AS indice_gini
+    LPAD(CAST(SAFE_CAST(t.id_uf AS INT64) AS STRING), 2, '0') AS id_uf,
+    SAFE_CAST(t.ano AS INT64) AS ano,
+    SAFE_CAST(t.gini_pib AS FLOAT64) AS indice_gini
   FROM `{tabela_gini}` AS t
 ),
 pib_anual AS (
@@ -222,7 +163,7 @@ pib_anual AS (
     MAX(g.indice_gini) AS indice_gini
   FROM pib_base AS p
   LEFT JOIN gini_base AS g
-    ON g.id_municipio = p.id_municipio
+    ON g.id_uf = SUBSTR(p.id_municipio, 1, 2)
     AND g.ano = p.ano
   WHERE p.id_municipio IS NOT NULL
     AND p.ano IS NOT NULL
@@ -230,29 +171,10 @@ pib_anual AS (
 ),
 populacao_base AS (
   SELECT
-    COALESCE(
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio_6'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.municipio_id')
-    ) AS id_municipio,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano_referencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.year')
-      ) AS INT64
-    ) AS ano,
-    COALESCE(
-      SAFE_CAST(JSON_VALUE(TO_JSON_STRING(t), '$.mes') AS INT64),
-      SAFE_CAST(JSON_VALUE(TO_JSON_STRING(t), '$.mes_referencia') AS INT64),
-      12
-    ) AS mes,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.populacao'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.populacao_estimada')
-      ) AS FLOAT64
-    ) AS populacao
+    CAST(t.id_municipio AS STRING) AS id_municipio,
+    SAFE_CAST(t.ano AS INT64) AS ano,
+    12 AS mes,
+    SAFE_CAST(t.populacao AS FLOAT64) AS populacao
   FROM `{tabela_pop}` AS t
 ),
 populacao AS (
@@ -269,45 +191,17 @@ populacao AS (
 ),
 proficiencia_base AS (
   SELECT
-    COALESCE(
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_municipio_6'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.municipio_id')
-    ) AS id_municipio,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano_referencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.year')
-      ) AS INT64
-    ) AS ano,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.proficiencia_media'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.proficiencia')
-      ) AS FLOAT64
-    ) AS proficiencia_media
+    CAST(t.id_municipio AS STRING) AS id_municipio,
+    CAST(t.sigla_uf AS STRING) AS sigla_uf,
+    SAFE_CAST(t.ano AS INT64) AS ano,
+    SAFE_CAST(t.proficiencia AS FLOAT64) AS proficiencia_media
   FROM `{tabela_proficiencia}` AS t
 ),
 taxa_alfabetizacao_uf AS (
   SELECT
-    COALESCE(
-      JSON_VALUE(TO_JSON_STRING(t), '$.id_uf'),
-      JSON_VALUE(TO_JSON_STRING(t), '$.sigla_uf')
-    ) AS id_uf,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.ano_referencia'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.year')
-      ) AS INT64
-    ) AS ano,
-    SAFE_CAST(
-      COALESCE(
-        JSON_VALUE(TO_JSON_STRING(t), '$.taxa_alfabetizacao'),
-        JSON_VALUE(TO_JSON_STRING(t), '$.taxa')
-      ) AS FLOAT64
-    ) AS taxa_alfabetizacao
+    CAST(t.sigla_uf AS STRING) AS sigla_uf,
+    SAFE_CAST(t.ano AS INT64) AS ano,
+    SAFE_CAST(t.taxa_alfabetizacao AS FLOAT64) AS taxa_alfabetizacao
   FROM `{tabela_taxa_alfabetizacao_uf}` AS t
 ),
 educacao_anual AS (
@@ -319,10 +213,7 @@ educacao_anual AS (
   FROM proficiencia_base AS p
   LEFT JOIN taxa_alfabetizacao_uf AS t
     ON t.ano = p.ano
-    AND (
-      t.id_uf = SUBSTR(p.id_municipio, 1, 2)
-      OR t.id_uf = LPAD(SUBSTR(p.id_municipio, 1, 2), 2, '0')
-    )
+    AND t.sigla_uf = p.sigla_uf
   WHERE p.id_municipio IS NOT NULL
     AND p.ano IS NOT NULL
   GROUP BY p.id_municipio, p.ano
@@ -458,13 +349,22 @@ WHEN NOT MATCHED THEN
   )
 """
 
+def _is_billing_dml_error(msg_lower):
+    return (
+        "billing has not been enabled" in msg_lower
+        or "billingnotenabled" in msg_lower
+        or "dml queries are not allowed in the free tier" in msg_lower
+    )
+
 # --- FUNÇÕES DE EXECUÇÃO E VALIDAÇÃO ---
 
 def executar_pipeline(project_id, analytics_dataset, analytics_table, mode, lookback_months, credentials_json=None):
     datasets = carregar_datasets()
-    client = obter_cliente()
+    client = obter_cliente(project_id=project_id, credentials_path=credentials_json)
 
-    if mode == "full":
+    modo_efetivo = "incremental" if mode == "auto" else mode
+
+    if modo_efetivo == "full":
       query = montar_query_full(project_id, analytics_dataset, analytics_table, datasets)
     else:
       # Lógica incremental (MERGE) conforme o original
@@ -473,14 +373,49 @@ def executar_pipeline(project_id, analytics_dataset, analytics_table, mode, look
     print(f"\n--- QUERY EXECUTADA NO BIGQUERY ---\n")
     print(query)
     print(f"\n--- FIM DA QUERY ---\n")
-    print(f"Executando pipeline no modo: {mode}...")
-    job = client.query(query)
-    job.result()
-    print(f"Sucesso! Tabela {analytics_dataset}.{analytics_table} atualizada.")
+    print(f"Executando pipeline no modo: {modo_efetivo}...")
+    try:
+      job = client.query(query)
+      job.result()
+      print(f"Sucesso! Tabela {analytics_dataset}.{analytics_table} atualizada.")
+    except Forbidden as exc:
+      msg = str(exc)
+      msg_lower = msg.lower()
 
-def validar_amostra(project_id, analytics_dataset, analytics_table, credentials_json=None):
+      # No BigQuery Sandbox, MERGE (DML) é bloqueado sem billing.
+      # Se o modo for incremental, tenta automaticamente o modo full.
+      if modo_efetivo == "incremental" and _is_billing_dml_error(msg_lower):
+        print("\nBilling não habilitado para DML (MERGE) no modo incremental.")
+        print("Tentando fallback automático para modo full (CREATE OR REPLACE TABLE)...")
+        try:
+          query_full = montar_query_full(project_id, analytics_dataset, analytics_table, datasets)
+          job_full = client.query(query_full)
+          job_full.result()
+          print(f"Sucesso! Tabela {analytics_dataset}.{analytics_table} atualizada via fallback full.")
+          return
+        except Exception as exc_full:
+          print(f"Fallback para modo full também falhou: {exc_full}")
+          raise
+
+      if "free query bytes scanned" in msg_lower or "quota exceeded" in msg_lower:
+        print("\nERRO DE COTA BIGQUERY (bytes escaneados).")
+        print("Solução recomendada:")
+        print("1) Execute no modo incremental (padrão) para reduzir varredura.")
+        print("2) Reduza --lookback-months (ex.: 1).")
+        print("3) Se necessário, habilite billing no projeto GCP para remover limite free tier.")
+      elif _is_billing_dml_error(msg_lower):
+        print("\nERRO DE BILLING BIGQUERY.")
+        print("Sem billing ativo, o BigQuery Sandbox bloqueia DML (MERGE/UPDATE/DELETE/INSERT).")
+        print("Solução recomendada:")
+        print("1) Ative billing no projeto GCP para usar modo incremental.")
+        print("2) Ou execute com --mode full para evitar MERGE.")
+      else:
+        print(f"\nErro de acesso/quota no BigQuery: {msg}")
+      raise
+
+def validar_amostra(project_id, analytics_dataset, analytics_table, export_local_csv=False, credentials_json=None):
     tabela = f"{project_id}.{analytics_dataset}.{analytics_table}"
-    client = obter_cliente()
+    client = obter_cliente(project_id=project_id, credentials_path=credentials_json)
     
     print("\n--- Amostra de Validação (Top 5) ---")
     query_amostra = f"SELECT * FROM `{tabela}` ORDER BY data_referencia DESC LIMIT 5"
@@ -488,7 +423,7 @@ def validar_amostra(project_id, analytics_dataset, analytics_table, credentials_
     print(df_amostra)
 
     # Exporta todos os dados para CSV se solicitado
-    if hasattr(args, "export_local_csv") and args.export_local_csv:
+    if export_local_csv:
       print("Exportando todos os dados para feature_store_beneficios.csv ...")
       query_tudo = f"SELECT * FROM `{tabela}`"
       df_tudo = client.query(query_tudo).to_dataframe()
@@ -504,8 +439,29 @@ def validar_amostra(project_id, analytics_dataset, analytics_table, credentials_
 def parse_args():
     parser = argparse.ArgumentParser(description="Pipeline Feature Store BigQuery")
     parser.add_argument("--project-id", default="projetofinalia-488312")
-    parser.add_argument("--mode", choices=["full", "incremental"], default="full")
-    parser.add_argument("--export-local-csv", action="store_true")
+    parser.add_argument(
+        "--mode",
+    choices=["full", "incremental", "auto"],
+    default="auto",
+    help="Modo de execução. auto tenta incremental e faz fallback para full em erro de billing.",
+    )
+    parser.add_argument(
+        "--lookback-months",
+        type=int,
+        default=2,
+        help="Quantidade de meses para reprocessar no modo incremental (padrão: 2).",
+    )
+    parser.add_argument(
+        "--credentials-json",
+        default=None,
+        help="Caminho opcional para arquivo de credenciais service account JSON.",
+    )
+    parser.add_argument(
+        "--export-local-csv",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Exporta CSV local após atualizar a tabela analytics (padrão: habilitado).",
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -515,6 +471,13 @@ if __name__ == "__main__":
         analytics_dataset="analytics",
         analytics_table="feature_store_beneficios",
         mode=args.mode,
-        lookback_months=2
+        lookback_months=args.lookback_months,
+        credentials_json=args.credentials_json,
     )
-    validar_amostra(args.project_id, "analytics", "feature_store_beneficios")
+    validar_amostra(
+        args.project_id,
+        "analytics",
+        "feature_store_beneficios",
+        export_local_csv=args.export_local_csv,
+        credentials_json=args.credentials_json,
+    )
